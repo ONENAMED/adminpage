@@ -1,12 +1,7 @@
-let userConfig = undefined
-try {
-  userConfig = await import('./v0-user-next.config')
-} catch (e) {
-  // ignore error
-}
+const { composePlugins, withNx } = require('@nx/next')
 
 /** @type {import('next').NextConfig} */
-const nextConfig = {
+const baseConfig = {
   eslint: {
     ignoreDuringBuilds: true,
   },
@@ -17,32 +12,40 @@ const nextConfig = {
     unoptimized: true,
   },
   experimental: {
-    webpackBuildWorker: true,
-    parallelServerBuildTraces: true,
-    parallelServerCompiles: true,
+    // Flags experimentais que ainda são relevantes
+    // webpackBuildWorker: true, // Disponível por padrão desde v13.1
   },
 }
 
-mergeConfig(nextConfig, userConfig)
+// Função para mesclar configurações
+const mergeConfigs = (base, user) => {
+  if (!user) return base
 
-function mergeConfig(nextConfig, userConfig) {
-  if (!userConfig) {
-    return
-  }
+  const mergedConfig = { ...base }
 
-  for (const key in userConfig) {
-    if (
-      typeof nextConfig[key] === 'object' &&
-      !Array.isArray(nextConfig[key])
-    ) {
-      nextConfig[key] = {
-        ...nextConfig[key],
-        ...userConfig[key],
-      }
+  for (const key in user) {
+    if (typeof user[key] === 'object' && !Array.isArray(user[key])) {
+      mergedConfig[key] = mergedConfig[key] ? { ...mergedConfig[key], ...user[key] } : user[key]
+    } else if (Array.isArray(user[key])) {
+      mergedConfig[key] = [...(mergedConfig[key] || []), ...user[key]]
     } else {
-      nextConfig[key] = userConfig[key]
+      mergedConfig[key] = user[key]
     }
   }
+
+  return mergedConfig
 }
 
-export default nextConfig
+// Exportação assíncrona para lidar com o carregamento da configuração do usuário
+export default composePlugins(
+  withNx(),
+  async () => {
+    try {
+      const userConfig = (await import('./v0-user-next.config')).default
+      return mergeConfigs(baseConfig, userConfig)
+    } catch (error) {
+      console.error('Erro ao carregar configuração do usuário:', error)
+      return baseConfig
+    }
+  }
+)()
